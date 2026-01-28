@@ -24,11 +24,11 @@ def train(args):
     # Mocking loading for now if file not present, user should provide correct path
     if not os.path.exists(args.data_path):
         logger.warning(f"Data path {args.data_path} not found. Creating dummy data for structure verification.")
-        X_train = np.random.rand(100, 20)
-        y_train = np.random.randint(0, 3, 100)
-        X_test = np.random.rand(20, 20)
-        y_test = np.random.randint(0, 3, 20)
-        loader.classes_ = [0, 1, 2] # Dummy classes
+        X_train = np.random.rand(100, 38)
+        y_train = np.random.randint(0, 10, 100)
+        X_test = np.random.rand(20, 38)
+        y_test = np.random.randint(0, 10, 20)
+        loader.classes_ = list(range(10)) # Mock 10 classes
     else:
         X_train, X_test, y_train, y_test = loader.load_and_process()
 
@@ -55,7 +55,7 @@ def train(args):
     if args.no_curriculum:
         env.buffer_prob = 0.0
     
-    agent = DDQNAgent(state_dim, n_classes, device=device, lr=args.lr)
+    agent = DDQNAgent(state_dim, n_classes, device=device, lr=args.lr, epsilon_decay=args.epsilon_decay)
     
     # 4. Training Loop
     logger.info("Starting RL Training...")
@@ -117,9 +117,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, default="D:/An adversarial environment reinforcement/train_test_network.csv")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--episodes", type=int, default=1000)
+    parser.add_argument("--episodes", type=int, default=50000)
     parser.add_argument("--encoder_epochs", type=int, default=5)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--epsilon_decay", type=float, default=0.995)
     parser.add_argument("--target_update_freq", type=int, default=10)
     parser.add_argument("--weight_update_freq", type=int, default=50)
     parser.add_argument("--skip_encoder_train", action="store_true")

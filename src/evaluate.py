@@ -19,11 +19,11 @@ def evaluate(args):
     # Mock for testing capability if file missing
     if not os.path.exists(args.data_path):
         logger.warning(f"Data path {args.data_path} not found. Creating dummy data.")
-        X_train = np.random.rand(100, 20)
-        y_train = np.random.randint(0, 3, 100)
-        X_test = np.random.rand(50, 20)
-        y_test = np.random.randint(0, 3, 50)
-        loader.classes_ = [0, 1, 2]
+        X_train = np.random.rand(100, 38)
+        y_train = np.random.randint(0, 10, 100)
+        X_test = np.random.rand(50, 38)
+        y_test = np.random.randint(0, 10, 50)
+        loader.classes_ = list(range(10))
     else:
         # We need the full split to respect the original training scaler fit?
         # Ideally we should save the scaler. For this implementation, we re-fit on train and transform test.
@@ -101,5 +101,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, default="D:/An adversarial environment reinforcement/train_test_network.csv")
     parser.add_argument("--model_path", type=str, default="results/checkpoints/policy_net.pth")
-    args = parser.parse_args()
-    evaluate(args)
+    # Allow running as script or imported
+    if __name__ == "__main__":
+        args = parser.parse_args()
+        evaluate(args)
