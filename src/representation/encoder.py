@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 import numpy as np
 import logging
 
@@ -36,13 +36,24 @@ class StateEncoder:
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.latent_dim = latent_dim
 
-    def train(self, X_train, epochs=10, batch_size=64):
+    def train(self, X_train, y_train=None, epochs=10, batch_size=64):
         logger.info(f"Training Autoencoder on {X_train.shape} for {epochs} epochs...")
         
         # Convert to tensor
         tensor_x = torch.Tensor(X_train).to(self.device)
         dataset = TensorDataset(tensor_x)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        
+        sampler = None
+        if y_train is not None:
+            # Balanced Sampler for Autoencoder
+            logger.info("Using Balanced Sampler for Autoencoder Training")
+            unique_classes, counts = np.unique(y_train, return_counts=True)
+            class_weights = 1.0 / counts
+            sample_weights = np.array([class_weights[int(t)] for t in y_train])
+            sample_weights = torch.from_numpy(sample_weights).double()
+            sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
+            
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler)
 
         self.model.train()
         for epoch in range(epochs):

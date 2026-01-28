@@ -40,7 +40,7 @@ def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     encoder = StateEncoder(input_dim, latent_dim=state_dim, device=device)
     if not args.skip_encoder_train:
-        encoder.train(X_train, epochs=args.encoder_epochs)
+        encoder.train(X_train, y_train, epochs=args.encoder_epochs)
     
     # 3. Initialize Components
     if args.no_adversary:
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_path", type=str, default="D:/An adversarial environment reinforcement/train_test_network.csv")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--episodes", type=int, default=50000)
-    parser.add_argument("--encoder_epochs", type=int, default=5)
+    parser.add_argument("--encoder_epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--epsilon_decay", type=float, default=0.995)
     parser.add_argument("--target_update_freq", type=int, default=10)
