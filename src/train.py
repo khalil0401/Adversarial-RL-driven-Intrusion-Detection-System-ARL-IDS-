@@ -32,7 +32,7 @@ def train(args):
     else:
         X_train, X_test, y_train, y_test = loader.load_and_process()
 
-    state_dim = 16 # Latent dim
+    state_dim = 32 # Latent dim
     input_dim = X_train.shape[1]
     n_classes = len(np.unique(y_train))
     
