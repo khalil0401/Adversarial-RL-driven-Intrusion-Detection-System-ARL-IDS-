@@ -37,11 +37,15 @@ class AdversarialIDSEnv(gym.Env):
         self.buffer_prob = 0.0 # Probability of sampling from buffer
         self.difficulty_scores = np.zeros(self.n_samples) # Track difficulty
         
-        # Reward Weights (Dynamic)
         if class_weights is None:
             self.class_weights = np.ones(self.n_classes)
         else:
             self.class_weights = class_weights
+            
+        # Pre-calculate indices for each class for balanced sampling
+        self.class_indices = {}
+        for c in range(self.n_classes):
+            self.class_indices[c] = np.where(y == c)[0]
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -53,8 +57,21 @@ class AdversarialIDSEnv(gym.Env):
             self.current_sample, self.current_label = self.adversarial_buffer[idx]
             self.is_adversarial = True
         else:
-            # Sample from Dataset (Random for now, could be ordered by difficulty)
-            self.current_idx = np.random.randint(self.n_samples)
+            # Balanced Sampling Strategy
+            # 50% chance: Random Sampling (maintains prior distribution)
+            # 50% chance: Class-Balanced Sampling (ensures minority classes are seen)
+            if np.random.rand() < 0.5:
+                self.current_idx = np.random.randint(self.n_samples)
+            else:
+                # Pick a class uniformly
+                target_class = np.random.randint(self.n_classes)
+                # Pick a sample from that class
+                indices = self.class_indices[target_class]
+                if len(indices) > 0:
+                    self.current_idx = np.random.choice(indices)
+                else:
+                    self.current_idx = np.random.randint(self.n_samples) # Fallback
+            
             self.current_sample = self.X[self.current_idx]
             self.current_label = self.y[self.current_idx]
             self.is_adversarial = False
@@ -112,7 +129,13 @@ class AdversarialIDSEnv(gym.Env):
         return self.state.flatten(), reward, terminated, truncated, info
 
     def update_class_weights(self, weights):
-        self.class_weights = weights
+        # Normalize weights to prevent explosion (keep mean around 1.0 or similar)
+        # This allows relative importance to change without destabilizing magnitude
+        mean_weight = np.mean(weights)
+        if mean_weight > 0:
+            weights = weights / mean_weight * 2.0 # Scale so mean is 2.0 (boost signal)
+        
+        self.class_weights = np.clip(weights, 0.5, 10.0) # Clip range
         logger.info(f"Updated Class Weights: {self.class_weights}")
 
     def update_buffer_prob(self, prob):
