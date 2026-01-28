@@ -38,7 +38,7 @@ def train(args):
     
     # 2. Representation Learning (Layer 1)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    encoder = StateEncoder(input_dim, latent_dim=state_dim, device=device)
+    encoder = StateEncoder(input_dim, latent_dim=state_dim, n_classes=n_classes, device=device)
     if not args.skip_encoder_train:
         encoder.train(X_train, y_train, epochs=args.encoder_epochs)
     
