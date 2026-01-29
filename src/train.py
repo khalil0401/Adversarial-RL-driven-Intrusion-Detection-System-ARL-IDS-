@@ -32,7 +32,7 @@ def train(args):
     else:
         X_train, X_test, y_train, y_test = loader.load_and_process()
 
-    state_dim = 32 # Latent dim
+    state_dim = 64 # Latent dim
     input_dim = X_train.shape[1]
     n_classes = len(np.unique(y_train))
     
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_path", type=str, default="D:/An adversarial environment reinforcement/train_test_network.csv")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--episodes", type=int, default=50000)
-    parser.add_argument("--encoder_epochs", type=int, default=20)
+    parser.add_argument("--encoder_epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--epsilon_decay", type=float, default=0.995)
     parser.add_argument("--target_update_freq", type=int, default=10)

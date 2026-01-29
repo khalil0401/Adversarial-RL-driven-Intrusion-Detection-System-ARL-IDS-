@@ -12,11 +12,11 @@ class QNetwork(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(QNetwork, self).__init__()
         self.fc = nn.Sequential(
-            nn.Linear(state_dim, 128),
+            nn.Linear(state_dim, 256),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(256, 256),
             nn.ReLU(),
-            nn.Linear(128, action_dim)
+            nn.Linear(256, action_dim)
         )
 
     def forward(self, x):
@@ -43,13 +43,14 @@ class DDQNAgent:
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.criterion = nn.MSELoss()
         
-        self.memory = deque(maxlen=10000)
-        self.batch_size = 64
+        self.memory = deque(maxlen=20000)
+        self.batch_size = 128
         
         # Metrics for Dynamic Weighting
         self.class_correct = np.zeros(action_dim)
         self.class_total = np.zeros(action_dim)
-        self.class_recall = np.zeros(action_dim)
+        self.class_predicted = np.zeros(action_dim)
+        self.class_f1 = np.zeros(action_dim)
 
     def select_action(self, state, training=True):
         if training and random.random() < self.epsilon:
@@ -67,6 +68,7 @@ class DDQNAgent:
         true_class = info.get("true_class")
         if true_class is not None:
             self.class_total[true_class] += 1
+            self.class_predicted[action] += 1
             if action == true_class:
                 self.class_correct[true_class] += 1
 
@@ -113,25 +115,39 @@ class DDQNAgent:
 
     def calculate_new_weights(self, current_weights):
         """
-        Calculate new weights based on Recall (Sensitivity).
-        weights = weights * (1 + alpha * (1 - recall))
+        Calculate new weights based on F1 Score (Harmonic mean of Precision and Recall).
+        weights = weights * (1 + alpha * (1 - F1))
         """
         # Calculate Recall
         with np.errstate(divide='ignore', invalid='ignore'):
-            self.class_recall = self.class_correct / self.class_total
-            self.class_recall = np.nan_to_num(self.class_recall) # handle div by zero
+            recall = self.class_correct / self.class_total
+            recall = np.nan_to_num(recall) # handle div by zero
             
-        logger.info(f"Class Recall: {self.class_recall}")
+            precision = self.class_correct / self.class_predicted
+            precision = np.nan_to_num(precision)
+            
+            f1 = 2 * (precision * recall) / (precision + recall)
+            f1 = np.nan_to_num(f1)
+            
+        self.class_f1 = f1
+        logger.info(f"Class F1 Scores: {self.class_f1} (Precision: {precision}, Recall: {recall})")
         
-        # Boost weights for classes with low recall
-        alpha = 0.5
-        new_weights = current_weights * (1 + alpha * (1 - self.class_recall))
+        # Boost weights for classes with low F1
+        # If F1 is low due to low Precision (Spamming), boosting weight might make it worse?
+        # No, if Precision is low, F1 is low. If we boost weight, we tell the agent "This class IS important".
+        # But wait, purely boosting weight increases the reward for Correct (+W) and penalty for Wrong (-W).
+        # If the agent is spamming (False Positives), it is getting -W penalty often.
+        # Increasing W makes the penalty for FP larger! So it DOES discourage spamming.
+        
+        alpha = 1.0 # Increased alpha to respond faster
+        new_weights = current_weights * (1 + alpha * (1 - self.class_f1))
         
         # Clip max weight to avoid explosion
-        new_weights = np.clip(new_weights, 1.0, 10.0)
+        new_weights = np.clip(new_weights, 1.0, 20.0) # Increased max cap
         
         # Reset metrics
         self.class_correct.fill(0)
         self.class_total.fill(0)
+        self.class_predicted.fill(0)
         
         return new_weights

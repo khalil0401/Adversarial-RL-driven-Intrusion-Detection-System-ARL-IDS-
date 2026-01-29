@@ -31,7 +31,7 @@ def evaluate(args):
 
     input_dim = X_train.shape[1]
     n_classes = len(np.unique(y_train))
-    state_dim = 16 
+    state_dim = 64 
 
     # Load Encoder
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -96,6 +96,15 @@ def evaluate(args):
         f.write(classification_report(y_test, preds))
     
     logger.info("Results saved to results/evaluation_results.txt")
+
+    # Confusion Matrix
+    cm = confusion_matrix(y_test, preds)
+    logger.info("\nConfusion Matrix:\n" + str(cm))
+    
+    # Log Class Mappings if available
+    if hasattr(loader, 'classes_'):
+        logger.info(f"Class Mappings: {list(enumerate(loader.classes_))}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

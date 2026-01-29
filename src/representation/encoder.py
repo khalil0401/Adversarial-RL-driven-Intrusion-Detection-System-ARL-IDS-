@@ -8,18 +8,18 @@ import logging
 logger = logging.getLogger("Encoder")
 
 class Autoencoder(nn.Module):
-    def __init__(self, input_dim, latent_dim=32, n_classes=10):
+    def __init__(self, input_dim, latent_dim=64, n_classes=10):
         super(Autoencoder, self).__init__()
         self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 64),
+            nn.Linear(input_dim, 128),
             nn.ReLU(),
-            nn.Linear(64, latent_dim),
+            nn.Linear(128, latent_dim),
             nn.ReLU()
         )
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 64),
+            nn.Linear(latent_dim, 128),
             nn.ReLU(),
-            nn.Linear(64, input_dim),
+            nn.Linear(128, input_dim),
             nn.Sigmoid() # Identifying normalized [0,1] input
         )
         self.classifier = nn.Linear(latent_dim, n_classes)
@@ -31,7 +31,7 @@ class Autoencoder(nn.Module):
         return encoded, decoded, logits
 
 class StateEncoder:
-    def __init__(self, input_dim, latent_dim=32, n_classes=10, learning_rate=1e-3, device='cpu'):
+    def __init__(self, input_dim, latent_dim=64, n_classes=10, learning_rate=1e-3, device='cpu'):
         self.device = device
         self.model = Autoencoder(input_dim, latent_dim, n_classes).to(self.device)
         self.criterion = nn.MSELoss()
@@ -81,7 +81,7 @@ class StateEncoder:
                 if len(batch) > 1:
                     labels = batch[1]
                     loss_cls = self.criterion_cls(logits, labels)
-                    loss = loss + 0.5 * loss_cls # Weight classification loss (Not in-place)
+                    loss = loss + 2.0 * loss_cls # Weight classification loss (Not in-place)
                 
                 loss.backward()
                 self.optimizer.step()
