@@ -104,7 +104,7 @@ This runs trials for `no_reward_shaping`, `no_adversary`, and `no_curriculum` va
 If you use this code for research, please cite:
 ```bibtex
 @software{arl_ids_2026,
-  author = {Your Name},
+  author = {BENCHEIKH Khalil},
   title = {Adversarial RL-driven Intrusion Detection System (ARL-IDS)},
   year = {2026},
   url = {https://github.com/your-repo/arl-ids}
