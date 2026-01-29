@@ -135,7 +135,7 @@ class AdversarialIDSEnv(gym.Env):
         if mean_weight > 0:
             weights = weights / mean_weight * 2.0 # Scale so mean is 2.0 (boost signal)
         
-        self.class_weights = np.clip(weights, 0.5, 10.0) # Clip range
+        self.class_weights = np.clip(weights, 0.5, 3.0) # Clip range (Reduced max from 10.0 to 3.0 to fix Normal class accumulation)
         logger.info(f"Updated Class Weights: {self.class_weights}")
 
     def update_buffer_prob(self, prob):

@@ -73,8 +73,13 @@ def train(args):
         raw_sample = env.current_sample # Get raw features (38,)
         
         # 2. Attacker Turn
-        action_atk = attacker.select_action(raw_sample)
-        perturbation = attacker.get_perturbation(action_atk)
+        if not args.no_adversary:
+            action_atk = attacker.select_action(raw_sample)
+            perturbation = attacker.get_perturbation(action_atk)
+        else:
+            # No Adversary: Zero perturbation (Clean Training)
+            perturbation = np.zeros_like(raw_sample)
+            action_atk = 0 # Dummy action
         
         # Apply perturbation
         raw_sample_adv = raw_sample + perturbation
@@ -104,15 +109,19 @@ def train(args):
         agent.store_transition(state_def_adv, action_def, reward_def, state_def_adv, True, {"true_class": true_class})
         
         # Attacker: (Raw_State, Action, Reward, Next_Raw_State(Terminal), Done)
-        # It's a single step game, so next state is terminal
-        attacker.store_transition(raw_sample, action_atk, reward_atk, raw_sample_adv, True)
+        # Only store and update if Adversary is active
+        if not args.no_adversary:
+            attacker.store_transition(raw_sample, action_atk, reward_atk, raw_sample_adv, True)
         
         # 6. Updates
         loss_def = agent.update()
-        loss_atk = attacker.update()
+        
+        if not args.no_adversary:
+            loss_atk = attacker.update()
         
         scores_def.append(reward_def)
-        scores_atk.append(reward_atk)
+        if not args.no_adversary:
+            scores_atk.append(reward_atk)
         
         # Periodic Updates
         if episode % args.target_update_freq == 0:
