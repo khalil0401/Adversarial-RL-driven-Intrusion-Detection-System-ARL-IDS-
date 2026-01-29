@@ -1,0 +1,171 @@
+1. Project Overview (Code-Derived Only)
+The system implements an Intrusion Detection System (IDS) using a Reinforcement Learning (RL) agent (Double DQN) operating within a custom OpenAI Gymnasium environment. The project decouples feature representation from decision-making using a pre-trained Autoencoder. It incorporates a lightweight adversarial mechanism that aggressively perturbs "hard" samples to populate an adversarial replay buffer, creating a curriculum learning effect. The system targets the ToN_IoT dataset.
+
+Does Implement:
+- A 4-layer architecture: Data Loading, State Representation (Autoencoder), Adversarial Environment, and RL Agent.
+- Double Deep Q-Network (DDQN) with Experience Replay.
+- Dynamic Reward Shaping based on class-wise F1 scores.
+- A stochastic, perturbation-based adversary (not learning-based).
+- Automated ablation study runner.
+
+Does NOT Implement:
+- GANs or Large Language Model (LLM) based generation.
+- Simultaneous multi-agent reinforcement learning (the adversary is heuristic, not an RL agent).
+- Distributed training.
+
+2. Global Execution Flow
+Entry Point: `src/start.py` (wrapper) or `src/train.py` (direct execution).
+
+Execution Sequence:
+1.  **Initialization**: `train.py` parses arguments (seeds, paths, hyperparameters).
+2.  **Data Loading**: `TonIoTLoader` loads CSV, encodes labels, and normalizes features (MinMax).
+3.  **Representation Learning**: `StateEncoder` is initialized. If `skip_encoder_train` is false, it trains the Autoencoder on `X_train` using MSE + CrossEntropy loss.
+4.  **Component Setup**: `LightweightAdversary`, `AdversarialIDSEnv`, and `DDQNAgent` are instantiated.
+5.  **Training Loop**:
+    -   Loops for `N` episodes.
+    -   Calls `env.reset()` to retrieve a state (latent vector of a sample).
+    -   Agent selects action via epsilon-greedy policy.
+    -   `env.step()` computes reward, updates difficulty scores, and optionally triggers the adversary to mutate hard samples for the buffer.
+    -   Agent stores transition in Replay Memory.
+    -   Agent performs an optimization step (SGD on Q-Network).
+    -   Periodic tasks: Update Target Network, Update Class Weights (F1-based), Update Curriculum (Buffer Probability).
+6.  **Termination**: After `N` episodes, saves `encoder.pth` and `policy_net.pth`.
+
+3. File-by-File Architecture Analysis
+
+- `src/train.py`
+  - Purpose: Main orchestration script.
+  - Imports: `torch`, `numpy`, `argparse`, components from `src.*`.
+  - Functions: `train(args)` manages the RL loop.
+  - Interactions: Instantiates and connects Loader, Encoder, Env, and Agent.
+
+- `src/evaluate.py`
+  - Purpose: Inference and metric calculation.
+  - Imports: `sklearn.metrics`, `torch`.
+  - Functions: `evaluate(args)` loads separate checkpoints for Encoder and Agent, runs batch inference on Test set.
+  - Interactions: Depends on `StateEncoder` and `DDQNAgent` definitions.
+
+- `src/ablation.py`
+  - Purpose: Batch runner for experimental verification.
+  - Functions: `run_ablation()` executes `train.py` via `subprocess` with specific flags (`--no_reward_shaping`, etc.).
+  - Interactions: External caller of `train.py`.
+
+- `src/agents/ddqn_agent.py`
+  - Purpose: RL Policy implementation.
+  - Classes: 
+    - `QNetwork`: MLP (Input -> 256 -> 256 -> Output).
+    - `DDQNAgent`: Manages Replay Buffer, Epsilon-Greedy logic, Target Network updates, and Optimization (`update`).
+  - Interactions: Called by `train.py` for actions and updates.
+
+- `src/envs/adversarial_ids_env.py`
+  - Purpose: Gym Environment logic.
+  - Classes: `AdversarialIDSEnv`.
+  - Logic: Manages dataset iteration, adversarial buffer, reward calculation, and difficulty tracking.
+  - Interactions: Uses `encoder` to transform raw data to state; uses `adversary` to generate mutations.
+
+- `src/representation/encoder.py`
+  - Purpose: Dimensionality reduction and feature extraction.
+  - Classes: 
+    - `Autoencoder`: MLP (Input -> 128 -> Latent(64) -> 128 -> Input) + Classifier Head.
+    - `StateEncoder`: Trainer wrapper handling weighted sampling and combined Loss (Recon + Classif).
+  - Interactions: Used by Env to produce observations.
+
+- `src/adversary/lightweight_generator.py`
+  - Purpose: Heuristic perturbation generator.
+  - Classes: `LightweightAdversary`.
+  - Logic: Adds uniform noise to features within constraints. Adapts strength based on success rate thresholds (<0.2 or >0.8).
+  - Interactions: Called by Env when difficulty > 0.5.
+
+- `src/data/ton_iot_loader.py`
+  - Purpose: Data preprocessing.
+  - Classes: `TonIoTLoader`.
+  - Logic: Load CSV, LabelEncode targets, MinScale features. Drop specific columns (`src_ip`, `dst_ip`, etc.).
+  - Interactions: Used by `train.py` and `evaluate.py`.
+
+4. Environment Design
+- **State Construction**: The raw feature vector (38 dim) is passed through `encoder.get_latent()`. The result is a flattened 64-dimensional float vector.
+- **State Vector**: Latent representations of network traffic. No explicit external context variables (historyless).
+- **Transitions**:
+  - `reset()`: Selects a new sample (Dataset or Buffer).
+  - `step()`: Transition is effectively `state_t` -> `terminal`. The environment is modeled as a Contextual Bandit or single-step episode.
+- **Termination**: `terminated` is always `True` after one step (`step` returns `terminated=True`).
+
+5. Agent Architecture
+
+5.1 Attacker Agent (Heuristic)
+- **Action Space**: Continuous perturbation vector $\delta \in \mathbb{R}^{38}$.
+- **Observation Space**: Raw feature vector of the sample being mutated.
+- **Reward calculation**: None (Logic is hardcoded rule-based adaptation).
+- **Learning Algorithm**: Heuristic Rule-Based (`adapt_strength` modifies `mutation_strength` scalar).
+
+5.2 Defender / IDS Agent
+- **Action Space**: Discrete(10). ID of the predicted class (0-9).
+- **Observation Space**: Continuous Vector $\in \mathbb{R}^{64}$ (Latent State).
+- **Detection Logic**: `argmax(Q(s))` from the Policy Network.
+- **Reward Formulation**: 
+  - Correct: $+1.0 \times W_c$
+  - Incorrect: $-1.0 \times W_c$
+  - Where $W_c$ is the dynamic class weight derived from `class_weights`.
+- **Resource Awareness**: Not explicitly implemented (no penalty for computation time or model size).
+
+6. Learning Pipeline
+- **Neural Network**:
+  - Input: 64 (Latent)
+  - Hidden 1: 256 (ReLU)
+  - Hidden 2: 256 (ReLU)
+  - Output: 10 (Linear Q-values)
+- **Loss Function**: Mean Squared Error (`nn.MSELoss`).
+- **Update Rule**: Standard Double DQN update:
+  - $Y = R + \gamma \times Q_{target}(S', \text{argmax} Q_{policy}(S'))$
+  - Loss = $MSE(Q_{policy}(S, A), Y)$
+- **Training Frequency**: Steps per episode = 1. `update()` called every episode (batch size condition permitting).
+- **Memory**: `collections.deque` (max_len=20000). Uniform random sampling.
+
+7. Adversarial / Self-Play Mechanism
+- **Interaction**:
+  1. Env selects sample.
+  2. If sample difficulty score increases > 0.5 (due to misclassification), `adversary.mutate()` is called.
+  3. Mutated sample is stored in `adversarial_buffer`.
+  4. Future `reset()` calls sample from this buffer with probability `buffer_prob`.
+- **Simultaneity**: Alternating/Reactive. The adversary generates samples based on past Agent failures. The Agent learns on these samples in future episodes.
+- **Coupling**: Implicit. Hard samples created by the Adversary become training data for the Agent (`buffer_prob` increases over time via curriculum).
+
+8. Metrics and Outputs
+- **Computed**:
+  - Training: Episode Score, Class Recall, Class Precision, Class F1 (internal).
+  - Evaluation: Accuracy, Weighted F1 Score, Confusion Matrix, Classification Report (Precision/Recall/F1 per class).
+- **Outputs**:
+  - Logs: Console logs (INFO level).
+  - Files: `results/evaluation_results.txt`, `results/checkpoints/encoder.pth`, `results/checkpoints/policy_net.pth`.
+- **Missing**: Latency/Throughput metrics, adversarial robustness specific metrics (attack success rate) in `evaluate.py`.
+
+9. Limitations (Code-Level)
+- **Single-Step Episodes**: The system treats IDS as independent classification tasks, ignoring temporal correlation in flows.
+- **Heuristic Adversary**: The adversary does not learn optimal attack policies; it relies on random noise.
+- **Separated Learning**: The Encoder is frozen during RL training (Layer 1 is distinct from Layer 3). No end-to-end tuning.
+- **Hardcoded Parameters**: Network architecture (256 units), State Dim (64), and max episodes are hardcoded or args-defaulted, not dynamically architectural searched.
+
+10. Architecture Summary Diagram (Textual)
+
+- Root
+  - Data Layer
+    - TonIoTLoader (CSV -> DataFrame -> Norm/Encode)
+  - Representation Layer
+    - StateEncoder (Trainer Wrapper)
+      - Autoencoder (Net: 38->128->64->128->38)
+      - Classifier Head (64->10)
+  - Environment Layer (Gym)
+    - AdversarialIDSEnv
+      - Adversarial Buffer (Deque)
+      - Difficulty Tracker (Array)
+      - LightweightAdversary (Noise Injector)
+  - Agent Layer
+    - DDQNAgent
+      - Policy Network (64->256->256->10)
+      - Target Network (Copy)
+      - Replay Memory (Deque)
+      - Dynamic Weight Calculator (F1-based)
+  - Execution Layer
+    - Train Script (Loop & Orchestration)
+    - Evaluate Script (Inference & Metrics)
+    - Ablation Script (Experiment Runner)

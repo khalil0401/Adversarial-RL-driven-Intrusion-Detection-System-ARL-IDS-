@@ -41,11 +41,11 @@ The framework is composed of four distinct, modular layers:
 *   **Algorithm**: **Double DQN (DDQN)**.
 *   **Justification**: Standard DQN suffers from Q-value overestimation, which is detrimental in high-stakes security environments. DDQN decouples action selection from value estimation, providing stable convergence.
 
-### Layer 4: Lightweight Adversary (The 'Sparring Partner')
-*   **Component**: `src/adversary/lightweight_generator.py`
-*   **Technique**: Bounded Stochastic Perturbation.
-*   **Constraint**: $x_{adv} = x + \delta$, subject to $||\delta||_\infty < \epsilon$.
-*   **Advantage**: Generates valid adversarial examples $1000\times$ faster than gradient-based methods (e.g., FGSM) or generative models (GANs), facilitating real-time adversarial training.
+### Layer 4: RL Attacker Agent (The 'Adversary')
+*   **Component**: `src/agents/attacker_agent.py`
+*   **Architecture**: Double Deep Q-Network (Input: 38, Output: 76).
+*   **Mechanism**: A learning agent that observes raw traffic and selects specific features to perturb ($\epsilon$-bounded). It optimizes a **Zero-Sum** reward function (Reward = -IDS Score).
+*   **Advantage**: Unlike static noise generators, the RL Attacker actively hunts for the IDS's blind spots, creating a dynamic "arms race" during training.
 
 ---
 
@@ -73,18 +73,43 @@ The system was evaluated on the **ToN_IoT** dataset (Train: 168k, Test: 42k) aft
 1.  Download `Train_Test_Network.csv` from the official [ToN_IoT repository](https://research.unsw.edu.au/projects/toniot-datasets).
 2.  Place in: `src/IoTtrain_test_network.csv` (or configure path in `src/start.py`).
 
-### Training (Full Protocol)
-To replicate the reported results, execute the training pipeline with the verified hyperparameters:
+### Full Training Pipeline (Competitive Self-Play)
+The system employs a **Competitive Reinforcement Learning** loop where the Defender and Attacker train simultaneously:
+1.  **Attacker Step**: Observes traffic $x$, selects perturbation $\delta$, generates $x_{adv}$.
+2.  **Defender Step**: Observes $x_{adv}$ (encoded), predicts class $\hat{y}$.
+3.  **Joint Update**: 
+    -   IDS Reward: Positive for correct, Negative for incorrect.
+    -   Attacker Reward: Negative of IDS Reward (Zero-Sum).
+    -   Both agents update their independent Policy/Target networks from separate Replay Buffers.
+
+To train the full system:
 ```bash
 python src/train.py --episodes 200000 --encoder_epochs 100 --weight_update_freq 1000
 ```
+*Outputs*: `results/checkpoints/policy_net.pth` (Defender) and `results/checkpoints/attacker_net.pth` (Attacker).
 
-### Evaluation
-Evaluate the trained agent on the held-out test set:
+### Full Evaluation (Joint Attacker–Defender Assessment)
+We implement a rigorous **Joint Policy Assessment** protocol where both agents are frozen and evaluated on the held-out test set in two passes:
+
+1.  **Clean Evaluation**: IDS is tested on unmodified test data (Standard Benchmark).
+2.  **Adversarial Evaluation**: The frozen RL Attacker generates perturbations for every test sample, and the IDS is tested on these adversarial inputs.
+
+**Metrics**:
+*   **Clean Accuracy**: Baseline performance.
+*   **Adversarial Accuracy**: Performance under active attack.
+*   **Robustness Gap**: $Acc_{clean} - Acc_{adv}$ (Lower is better).
+*   **Attack Success Rate (ASR)**: % of correctly classified samples that are successfully evaded after perturbation.
+*   **Confidence Drop**: Reduction in IDS confidence scores due to attack.
+
+To run the joint evaluation:
 ```bash
-python src/Run_Evaluation.py
+python src/evaluate.py
 ```
-This generates `results/evaluation_results.txt` containing the Classification Report and Confusion Matrix.
+*Outputs*: `results/joint_evaluation_results.txt` containing full comparative metrics.
+
+## 6. Scientific Positioning
+**Why Joint Evaluation?**
+Evaluating an IDS against static noise (e.g., Gaussian) provides a false sense of security. By training a dedicated RL Attacker and then evaluating the IDS against this *optimized* adversary, we measure the **Worst-Case Robustness**. This methodology prevents "Gradient Masking" and overfitting to specific static attack patterns, ensuring the IDS is resilient against adaptive threats—a critical requirement for real-world IoT deployment.
 
 ### Ablation Studies
 To verify component efficacy, run the ablation suite:
@@ -104,7 +129,7 @@ This runs trials for `no_reward_shaping`, `no_adversary`, and `no_curriculum` va
 If you use this code for research, please cite:
 ```bibtex
 @software{arl_ids_2026,
-  author = {BENCHEIKH Khalil},
+  author = {Khalil BENCHEIKH},
   title = {Adversarial RL-driven Intrusion Detection System (ARL-IDS)},
   year = {2026},
   url = {https://github.com/your-repo/arl-ids}

@@ -43,75 +43,99 @@ def train(args):
         encoder.train(X_train, y_train, epochs=args.encoder_epochs)
     
     # 3. Initialize Components
-    if args.no_adversary:
-        # Dummy adversary that does nothing or Env ignores it
-        adversary = LightweightAdversary(mutation_rate=0.0, mutation_strength=0.0)
-    else:
-        adversary = LightweightAdversary(mutation_rate=0.1, mutation_strength=0.1)
-        
-    env = AdversarialIDSEnv(X_train, y_train, encoder, adversary)
+    # 3. Initialize Components
+    # Adversary Agent (RL)
+    from src.agents.attacker_agent import AttackerAgent
+    # Input dim for attacker is raw features (38)
+    attacker = AttackerAgent(input_dim=input_dim, action_dim=input_dim*2, device=device)
     
-    # Disable curriculum by forcing buffer_prob to 0 always if requested
-    if args.no_curriculum:
-        env.buffer_prob = 0.0
+    # Environment (Now just a container for data & transitions, adversary logic moved to agent)
+    # We pass None as adversary to Env because we handle mutation manually in the loop
+    env = AdversarialIDSEnv(X_train, y_train, encoder, adversary=None) 
     
+    # Disable internal curriculum buffer if we are using active Attacker Agent (to avoid double shifting)
+    # Or keep it as "Hard Sample Mining"? Let's disable Env buffer to isolate Attacker Agent efficacy.
+    env.buffer_prob = 0.0
+    
+    # Defender Agent
     agent = DDQNAgent(state_dim, n_classes, device=device, lr=args.lr, epsilon_decay=args.epsilon_decay)
     
-    # 4. Training Loop
-    logger.info("Starting RL Training...")
-    scores = []
+    # 4. Competitive Training Loop
+    logger.info("Starting Competitive RL Training (Attacker vs Defender)...")
+    scores_def = []
+    scores_atk = []
     
     for episode in range(args.episodes):
-        state, _ = env.reset()
-        done = False
-        score = 0
+        # 1. Reset Env (Get clean sample)
+        # Note: We need raw sample for Attacker, Env.reset() returns encoded state.
+        # We need to peek at env.current_sample
+        state_def_clean, _ = env.reset() 
+        raw_sample = env.current_sample # Get raw features (38,)
         
-        while not done:
-            action = agent.select_action(state)
-            next_state, reward, terminated, truncated, info = env.step(action)
+        # 2. Attacker Turn
+        action_atk = attacker.select_action(raw_sample)
+        perturbation = attacker.get_perturbation(action_atk)
+        
+        # Apply perturbation
+        raw_sample_adv = raw_sample + perturbation
+        raw_sample_adv = np.clip(raw_sample_adv, 0.0, 1.0) # Ensure valid range
+        
+        # 3. Defender Turn
+        # Encode adversary sample
+        state_def_adv = encoder.get_latent(raw_sample_adv).flatten()
+        action_def = agent.select_action(state_def_adv)
+        
+        # 4. Step Logic (Get Reward)
+        # We manually calculate reward derived from Env logic
+        true_class = env.current_label
+        weight = env.class_weights[true_class]
+        
+        reward_def = 0
+        if action_def == true_class:
+            reward_def = 1.0 * weight
+        else:
+            reward_def = -1.0 * weight
             
-            # Ablation: No Reward Shaping -> Reset weight from Env (which applies it) or normalize it back?
-            # Env calculates reward = W * (+/-1). If no_shaping, we want reward = 1 * (+/-1).
-            # Easier to just tell Env to use ones. But Env uses dynamic class attributes.
-            # We can force env.class_weights to ones if no_shaping.
-            if args.no_reward_shaping:
-                # Hack: Divide by weight used? Or just keep it 1.0. 
-                # Better: Ensure env has weights=1.0.
-                pass # See weight update section below
-                
-            done = terminated or truncated
-            
-            agent.store_transition(state, action, reward, next_state, done, info)
-            loss = agent.update()
-            
-            state = next_state
-            score += reward
-            
-        scores.append(score)
+        # Zero-Sum Reward for Attacker (Clipped to avoid explosion)
+        reward_atk = -reward_def 
+        
+        # 5. Store Transitions
+        # Defender: (State_Adv, Action, Reward, Next_State(Terminal), Done)
+        agent.store_transition(state_def_adv, action_def, reward_def, state_def_adv, True, {"true_class": true_class})
+        
+        # Attacker: (Raw_State, Action, Reward, Next_Raw_State(Terminal), Done)
+        # It's a single step game, so next state is terminal
+        attacker.store_transition(raw_sample, action_atk, reward_atk, raw_sample_adv, True)
+        
+        # 6. Updates
+        loss_def = agent.update()
+        loss_atk = attacker.update()
+        
+        scores_def.append(reward_def)
+        scores_atk.append(reward_atk)
         
         # Periodic Updates
         if episode % args.target_update_freq == 0:
             agent.update_target_network()
+            attacker.update_target_network()
             
         if episode % args.weight_update_freq == 0 and episode > 0:
             if not args.no_reward_shaping:
                 new_weights = agent.calculate_new_weights(env.class_weights)
                 env.update_class_weights(new_weights)
-            
-            # Curriculum Update (Adversarial Prob)
-            if not args.no_curriculum:
-                avg_score = np.mean(scores[-50:]) if len(scores) > 50 else score
-                if avg_score > 0.8 * args.max_steps_per_episode: 
-                    env.update_buffer_prob(min(0.5, env.buffer_prob + 0.05))
                 
         if episode % 100 == 0:
-            logger.info(f"Episode {episode}\tScore: {score:.2f}\tEpsilon: {agent.epsilon:.2f}\tBufferProb: {env.buffer_prob:.2f}")
+            # Calculate win rates
+            recent_def = np.mean(scores_def[-100:])
+            recent_atk = np.mean(scores_atk[-100:])
+            logger.info(f"Ep {episode} | Def Score: {recent_def:.2f} (Eps: {agent.epsilon:.2f}) | Atk Score: {recent_atk:.2f} (Eps: {attacker.epsilon:.2f})")
 
     # Save Models
     os.makedirs("results/checkpoints", exist_ok=True)
     encoder.save("results/checkpoints/encoder.pth")
     torch.save(agent.policy_net.state_dict(), "results/checkpoints/policy_net.pth")
-    logger.info("Training Complete.")
+    torch.save(attacker.policy_net.state_dict(), "results/checkpoints/attacker_net.pth")
+    logger.info("Competitive Training Complete.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
