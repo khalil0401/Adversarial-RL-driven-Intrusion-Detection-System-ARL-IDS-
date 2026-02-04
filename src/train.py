@@ -2,8 +2,17 @@ import argparse
 import logging
 import numpy as np
 import torch
+import torch
 import os
+import sys
 import json
+
+# Add project root to path ensuring 'src' module can be found
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
 from src.data.ton_iot_loader import TonIoTLoader
 from src.representation.encoder import StateEncoder
 from src.envs.adversarial_ids_env import AdversarialIDSEnv

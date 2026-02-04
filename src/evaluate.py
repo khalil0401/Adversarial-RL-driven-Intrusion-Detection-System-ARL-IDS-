@@ -3,7 +3,16 @@ import logging
 import numpy as np
 import torch
 import torch.nn.functional as F
+import torch.nn.functional as F
 import os
+import sys
+
+# Add project root to path ensuring 'src' module can be found
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
 from sklearn.metrics import classification_report, confusion_matrix, f1_score, accuracy_score
 from src.data.ton_iot_loader import TonIoTLoader
 from src.representation.encoder import StateEncoder
