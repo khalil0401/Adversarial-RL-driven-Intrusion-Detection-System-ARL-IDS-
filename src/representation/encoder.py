@@ -111,6 +111,6 @@ class StateEncoder:
         logger.info(f"Encoder saved to {path}")
 
     def load(self, path):
-        self.model.load_state_dict(torch.load(path))
+        self.model.load_state_dict(torch.load(path, map_location=self.device))
         self.model.eval()
         logger.info(f"Encoder loaded from {path}")

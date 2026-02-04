@@ -60,7 +60,7 @@ def evaluate(args):
     # Defender
     defender = DDQNAgent(state_dim, n_classes, device=device)
     try:
-        defender.policy_net.load_state_dict(torch.load(args.defender_path))
+        defender.policy_net.load_state_dict(torch.load(args.defender_path, map_location=device))
         defender.policy_net.eval()
     except FileNotFoundError:
         logger.error(f"Defender model missing at {args.defender_path}")
@@ -69,7 +69,7 @@ def evaluate(args):
     # Attacker
     attacker = AttackerAgent(input_dim=input_dim, action_dim=input_dim*2, device=device)
     try:
-        attacker.policy_net.load_state_dict(torch.load(args.attacker_path))
+        attacker.policy_net.load_state_dict(torch.load(args.attacker_path, map_location=device))
         attacker.policy_net.eval()
     except FileNotFoundError:
         logger.error(f"Attacker model missing at {args.attacker_path}")
