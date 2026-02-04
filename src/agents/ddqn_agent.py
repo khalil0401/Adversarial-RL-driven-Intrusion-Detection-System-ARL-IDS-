@@ -143,7 +143,7 @@ class DDQNAgent:
         new_weights = current_weights * (1 + alpha * (1 - self.class_f1))
         
         # Clip max weight to avoid explosion
-        new_weights = np.clip(new_weights, 1.0, 20.0) # Increased max cap
+        new_weights = np.clip(new_weights, 1.0, 3.0) # Reduced cap to prevent reward hacking
         
         # Reset metrics
         self.class_correct.fill(0)
