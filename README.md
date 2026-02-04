@@ -74,33 +74,18 @@ The system was evaluated on the **ToN_IoT** dataset (Train: 168k, Test: 42k) aft
 2.  Place in: `src/IoTtrain_test_network.csv` (or configure path in `src/start.py`).
 
 ### Full Training Pipeline (Competitive Self-Play)
-The system employs a **Competitive Reinforcement Learning** loop where the Defender and Attacker train simultaneously:
-1.  **Attacker Step**: Observes traffic $x$, selects perturbation $\delta$, generates $x_{adv}$.
-2.  **Defender Step**: Observes $x_{adv}$ (encoded), predicts class $\hat{y}$.
-3.  **Joint Update**: 
-    -   IDS Reward: Positive for correct, Negative for incorrect.
-    -   Attacker Reward: Negative of IDS Reward (Zero-Sum).
-    -   Both agents update their independent Policy/Target networks from separate Replay Buffers.
+The system employs a **Competitive Reinforcement Learning** loop where the Defender and Attacker train simultaneously.
+
+See [SETUP.md](SETUP.md) for detailed installation and configuration instructions.
 
 To train the full system:
 ```bash
-python src/train.py --episodes 200000 --encoder_epochs 100 --weight_update_freq 1000
+python src/run_Training.py --episodes 200000 --encoder_epochs 100
 ```
 *Outputs*: `results/checkpoints/policy_net.pth` (Defender) and `results/checkpoints/attacker_net.pth` (Attacker).
 
 ### Full Evaluation (Joint Attacker–Defender Assessment)
-We implement a rigorous **Joint Policy Assessment** protocol where both agents are frozen and evaluated on the held-out test set in two passes:
-
-1.  **Clean Evaluation**: IDS is tested on unmodified test data (Standard Benchmark).
-2.  **Adversarial Evaluation**: The frozen RL Attacker generates perturbations for every test sample, and the IDS is tested on these adversarial inputs.
-
-**Metrics**:
-*   **Clean Accuracy**: Baseline performance.
-*   **Adversarial Accuracy**: Performance under active attack.
-*   **Robustness Gap**: $Acc_{clean} - Acc_{adv}$ (Lower is better).
-*   **Attack Success Rate (ASR)**: % of correctly classified samples that are successfully evaded after perturbation.
-*   **Confidence Drop**: Reduction in IDS confidence scores due to attack.
-
+We implement a rigorous **Joint Policy Assessment** protocol where both agents are frozen and evaluated.
 To run the joint evaluation:
 ```bash
 python src/evaluate.py

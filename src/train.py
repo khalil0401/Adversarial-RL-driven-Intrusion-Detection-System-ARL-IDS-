@@ -147,15 +147,17 @@ def train(args):
     logger.info("Competitive Training Complete.")
 
 if __name__ == "__main__":
+    from src.config import Config
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_path", type=str, default="D:/An adversarial environment reinforcement/train_test_network.csv")
+    parser.add_argument("--data_path", type=str, default=Config.get_data_path())
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--episodes", type=int, default=50000)
-    parser.add_argument("--encoder_epochs", type=int, default=100)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--epsilon_decay", type=float, default=0.995)
-    parser.add_argument("--target_update_freq", type=int, default=10)
-    parser.add_argument("--weight_update_freq", type=int, default=50)
+    parser.add_argument("--episodes", type=int, default=Config.EPISODES)
+    parser.add_argument("--encoder_epochs", type=int, default=Config.ENCODER_EPOCHS)
+    parser.add_argument("--lr", type=float, default=Config.LEARNING_RATE)
+    parser.add_argument("--epsilon_decay", type=float, default=Config.EPSILON_DECAY)
+    parser.add_argument("--target_update_freq", type=int, default=Config.TARGET_UPDATE_FREQ)
+    parser.add_argument("--weight_update_freq", type=int, default=Config.WEIGHT_UPDATE_FREQ)
     parser.add_argument("--skip_encoder_train", action="store_true")
     # Hack for undefined max_steps_per_episode in env
     # In my env implementation, step returns Terminated=True immediately? No, wait.

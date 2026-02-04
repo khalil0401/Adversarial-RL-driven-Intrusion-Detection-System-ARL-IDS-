@@ -41,7 +41,7 @@ def evaluate(args):
     logger.info("Loading Models (Encoder, Defender, Attacker)...")
     
     # Encoder
-    encoder = StateEncoder(input_dim, latent_dim=state_dim, device=device)
+    encoder = StateEncoder(input_dim, latent_dim=state_dim, n_classes=n_classes, device=device)
     try:
         encoder.load("results/checkpoints/encoder.pth")
     except FileNotFoundError:
@@ -186,8 +186,10 @@ def evaluate(args):
     logger.info("Results saved to results/joint_evaluation_results.txt")
 
 if __name__ == "__main__":
+    from src.config import Config
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_path", type=str, default="D:/An adversarial environment reinforcement/train_test_network.csv")
+    parser.add_argument("--data_path", type=str, default=Config.get_data_path())
     parser.add_argument("--defender_path", type=str, default="results/checkpoints/policy_net.pth")
     parser.add_argument("--attacker_path", type=str, default="results/checkpoints/attacker_net.pth")
     parser.add_argument("--seed", type=int, default=42)

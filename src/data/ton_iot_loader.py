@@ -40,6 +40,10 @@ class TonIoTLoader:
         # Basic cleaning
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
         df.dropna(inplace=True)
+
+        if 'type' not in df.columns:
+            raise ValueError(f"Dataset missing required column 'type'. Available columns: {list(df.columns)}")
+        
         
         # Log distribution before processing
         logger.info("Class Distribution (Raw):")

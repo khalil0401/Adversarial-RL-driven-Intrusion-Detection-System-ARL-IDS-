@@ -7,3 +7,7 @@ results/checkpoints/
 results/ablation/
 *.csv
 !src/data/.gitkeep
+
+*.log
+
+results/*.txt

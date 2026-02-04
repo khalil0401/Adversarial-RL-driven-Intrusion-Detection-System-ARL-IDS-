@@ -1,41 +1,54 @@
-import os
 import subprocess
 import logging
+import sys
+from src.config import Config, ABLATION_DIR
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("AblationRunner")
-
-TRIALS = {
-    "baseline": [], # Full model
-    "no_reward_shaping": ["--no_reward_shaping"],
-    "no_adversary": ["--no_adversary"],
-    "no_curriculum": ["--no_curriculum"]
-}
+# Configure Logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("Ablation_Study")
 
 def run_ablation():
-    os.makedirs("results/ablation", exist_ok=True)
+    # Define ablation scenarios
+    scenarios = [
+        {"name": "baseline_full", "flags": []},
+        {"name": "no_reward_shaping", "flags": ["--no_reward_shaping"]},
+        {"name": "no_adversary", "flags": ["--no_adversary"]},
+        {"name": "no_curriculum", "flags": ["--no_curriculum"]},
+    ]
     
-    for name, flags in TRIALS.items():
-        logger.info(f"Running Ablation Trial: {name}")
+    # Ensure output directory exists
+    ABLATION_DIR.mkdir(exist_ok=True)
+    
+    logger.info(f"Starting Ablation Study with {len(scenarios)} scenarios...")
+    
+    for scenario in scenarios:
+        name = scenario["name"]
+        flags = scenario["flags"]
         
-        cmd = ["python", "-m", "src.train", "--episodes", "500"] + flags
+        logger.info(f"Running Scenario: {name}")
         
-        # In a real scenario, we might want to change the output directory for checkpoints
-        # But train.py currently hardcodes "results/checkpoints".
-        # We should modify train.py to accept --output_dir or handle it here by moving files after run.
-        # For simplicity in this research reconstruction, we will just run them. 
-        # Ideally, we modify train.py to support --output_dir.
+        # Construct command
+        # Use sys.executable to ensure we use the same python environment
+        cmd = [sys.executable, "src/train.py", "--episodes", "50000"] + flags
+        
+        # Add data path explicitly from config
+        cmd.extend(["--data_path", Config.get_data_path()])
+        
+        logger.info(f"Executing: {' '.join(cmd)}")
         
         try:
-            subprocess.run(cmd, check=True)
-            logger.info(f"Trial {name} completed successfully.")
+            # Capture output
+            result = subprocess.run(cmd, check=True, text=True, capture_output=True)
             
-            # Move results to valid folder
-            # Assuming train.py saves to results/checkpoints
-            target_dir = f"results/ablation/{name}"
-            os.makedirs(target_dir, exist_ok=True)
-            if os.path.exists("results/checkpoints/policy_net.pth"):
-                os.rename("results/checkpoints/policy_net.pth", f"{target_dir}/policy_net.pth")
+            # Save logs
+            log_file = ABLATION_DIR / f"{name}.log"
+            with open(log_file, "w") as f:
+                f.write(result.stdout)
+                if result.stderr:
+                    f.write("\n=== STDERR ===\n")
+                    f.write(result.stderr)
+            
+            logger.info(f"Scenario {name} completed. Logs saved to {log_file}")
             
         except subprocess.CalledProcessError as e:
             logger.error(f"Trial {name} failed: {e}")

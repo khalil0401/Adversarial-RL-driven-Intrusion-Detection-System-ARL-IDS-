@@ -12,8 +12,9 @@ from src.evaluate import evaluate
 # Define arguments class to simulate argparse
 class Args:
     def __init__(self):
-        self.data_path = "src\IoTtrain_test_network.csv" # CHANGE THIS PATH to your dataset location
-        self.model_path = "results\checkpoints\policy_net.pth"
+        from src.config import Config
+        self.data_path = Config.get_data_path()
+        self.model_path = "results/checkpoints/policy_net.pth"
         self.seed = 42
         self.episodes = 200000 # Increased for better convergence
         self.encoder_epochs = 100
