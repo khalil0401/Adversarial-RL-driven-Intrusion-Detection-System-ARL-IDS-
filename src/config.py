@@ -46,11 +46,11 @@ class Config:
     
     # Training
     EPISODES = 50000
-    ENCODER_EPOCHS = 100
-    LEARNING_RATE = 1e-4  # Lower LR for stability
-    EPSILON_DECAY = 0.9999 # Much slower decay (approx 20k steps to 1%)
-    TARGET_UPDATE_FREQ = 100 # Less frequent updates for stability
-    WEIGHT_UPDATE_FREQ = 1000 # Allow more time for weights to stabilize
+    ENCODER_EPOCHS = 200  # Increased for better feature representation
+    LEARNING_RATE = 5e-4  # Slightly faster LR (was 1e-4)
+    EPSILON_DECAY = 0.9999 
+    TARGET_UPDATE_FREQ = 1000
+    WEIGHT_UPDATE_FREQ = 1000
     
     # Architecture
     LATENT_DIM = 64
