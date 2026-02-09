@@ -183,7 +183,7 @@ class MetricsLogger:
         with open(filepath, 'w') as f:
             json.dump(self.metrics, f, indent=2)
         
-        print(f"✅ Metrics saved to: {filepath}")
+        print(f"[SUCCESS] Metrics saved to: {filepath}")
         return filepath
     
     def save_csv(self, filename=None):
@@ -231,5 +231,5 @@ class MetricsLogger:
                     ])
                 writer.writerow(row)
         
-        print(f"✅ CSV saved to: {filepath}")
+        print(f"[SUCCESS] CSV saved to: {filepath}")
         return filepath

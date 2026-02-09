@@ -139,17 +139,13 @@ def train(args):
         if not args.no_adversary:
             scores_atk.append(reward_atk)
         
-        # Log metrics
-        metrics_logger.log_step(
-            episode=episode,
-            defender_score=reward_def,
-            attacker_score=reward_atk if not args.no_adversary else 0,
-            defender_loss=loss_def,
-            attacker_loss=loss_atk,
-            defender_epsilon=agent.epsilon,
-            attacker_epsilon=attacker.epsilon if not args.no_adversary else 0
-        )
+        # Consolidate metrics
+        loss_atk_val = loss_atk if loss_atk is not None else 0
+        eps_atk_val = attacker.epsilon if not args.no_adversary else 0
         
+        current_class_f1 = None
+        current_class_weights = None
+
         # Periodic Updates
         if episode % args.target_update_freq == 0:
             agent.update_target_network()
@@ -160,14 +156,22 @@ def train(args):
                 new_weights = agent.calculate_new_weights(env.class_weights)
                 env.update_class_weights(new_weights)
                 
-                # Log class F1 and weights
-                metrics_logger.log_step(
-                    episode=episode,
-                    defender_score=reward_def,
-                    attacker_score=reward_atk if not args.no_adversary else 0,
-                    class_f1=agent.class_f1,
-                    class_weights=env.class_weights
-                )
+                # capture for logging
+                current_class_f1 = agent.class_f1
+                current_class_weights = env.class_weights
+                
+        # Log metrics (Single duplicate-free call)
+        metrics_logger.log_step(
+            episode=episode,
+            defender_score=reward_def,
+            attacker_score=reward_atk if not args.no_adversary else 0,
+            defender_loss=loss_def,
+            attacker_loss=loss_atk,
+            defender_epsilon=agent.epsilon,
+            attacker_epsilon=eps_atk_val,
+            class_f1=current_class_f1,
+            class_weights=current_class_weights
+        )
                 
         if episode % 100 == 0:
             # Calculate win rates

@@ -69,7 +69,7 @@ class Config:
     def get_data_path(cls):
         """Get data path, checking if file exists"""
         if not Path(cls.DATA_PATH).exists():
-            print(f"⚠️  Warning: Data file not found at {cls.DATA_PATH}")
+            print(f"[WARNING] Data file not found at {cls.DATA_PATH}")
             print(f"   Set environment variable ARL_IDS_DATA_PATH to specify custom location")
             print(f"   Example: set ARL_IDS_DATA_PATH=C:\\path\\to\\train_test_network.csv")
         return cls.DATA_PATH
