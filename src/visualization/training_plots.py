@@ -52,7 +52,8 @@ def plot_training_curves(metrics_file, output_dir="results/plots", show=False):
         if len(def_scores) > window:
             def_smooth = moving_average(def_scores, window)
             atk_smooth = moving_average(atk_scores, window)
-            episodes_smooth = episodes[window-1:]
+            # Ensure episodes_smooth matches the length of smoothed arrays
+            episodes_smooth = episodes[:len(def_smooth)]
             
             ax.plot(episodes_smooth, def_smooth, label='Defender (smoothed)', color='#2ecc71', linewidth=2)
             ax.plot(episodes_smooth, atk_smooth, label='Attacker (smoothed)', color='#e74c3c', linewidth=2)
@@ -91,7 +92,9 @@ def plot_training_curves(metrics_file, output_dir="results/plots", show=False):
         if len(def_losses) > window:
             def_loss_smooth = moving_average(def_losses, window)
             atk_loss_smooth = moving_average(atk_losses, window)
-            loss_episodes = np.array(episodes[:len(def_losses)])[window-1:]
+            # Ensure loss_episodes matches the length of smoothed arrays
+            all_loss_episodes = np.array(episodes[:len(def_losses)])
+            loss_episodes = all_loss_episodes[:len(def_loss_smooth)]
             
             ax.plot(loss_episodes, def_loss_smooth, label='Defender Loss', color='#2ecc71', linewidth=2)
             ax.plot(loss_episodes, atk_loss_smooth, label='Attacker Loss', color='#e74c3c', linewidth=2)
