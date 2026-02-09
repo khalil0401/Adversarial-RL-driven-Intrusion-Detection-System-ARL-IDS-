@@ -18,6 +18,8 @@ from src.representation.encoder import StateEncoder
 from src.envs.adversarial_ids_env import AdversarialIDSEnv
 from src.agents.ddqn_agent import DDQNAgent
 from src.adversary.lightweight_generator import LightweightAdversary
+from src.utils.metrics_logger import MetricsLogger
+from src.visualization.training_plots import generate_all_plots
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -74,6 +76,10 @@ def train(args):
     scores_def = []
     scores_atk = []
     
+    # Initialize metrics logger
+    experiment_name = f"arl_ids_{args.episodes}ep"
+    metrics_logger = MetricsLogger(experiment_name=experiment_name)
+    
     for episode in range(args.episodes):
         # 1. Reset Env (Get clean sample)
         # Note: We need raw sample for Attacker, Env.reset() returns encoded state.
@@ -124,6 +130,7 @@ def train(args):
         
         # 6. Updates
         loss_def = agent.update()
+        loss_atk = None
         
         if not args.no_adversary:
             loss_atk = attacker.update()
@@ -131,6 +138,17 @@ def train(args):
         scores_def.append(reward_def)
         if not args.no_adversary:
             scores_atk.append(reward_atk)
+        
+        # Log metrics
+        metrics_logger.log_step(
+            episode=episode,
+            defender_score=reward_def,
+            attacker_score=reward_atk if not args.no_adversary else 0,
+            defender_loss=loss_def,
+            attacker_loss=loss_atk,
+            defender_epsilon=agent.epsilon,
+            attacker_epsilon=attacker.epsilon if not args.no_adversary else 0
+        )
         
         # Periodic Updates
         if episode % args.target_update_freq == 0:
@@ -142,11 +160,27 @@ def train(args):
                 new_weights = agent.calculate_new_weights(env.class_weights)
                 env.update_class_weights(new_weights)
                 
+                # Log class F1 and weights
+                metrics_logger.log_step(
+                    episode=episode,
+                    defender_score=reward_def,
+                    attacker_score=reward_atk if not args.no_adversary else 0,
+                    class_f1=agent.class_f1,
+                    class_weights=env.class_weights
+                )
+                
         if episode % 100 == 0:
             # Calculate win rates
             recent_def = np.mean(scores_def[-100:])
-            recent_atk = np.mean(scores_atk[-100:])
-            logger.info(f"Ep {episode} | Def Score: {recent_def:.2f} (Eps: {agent.epsilon:.2f}) | Atk Score: {recent_atk:.2f} (Eps: {attacker.epsilon:.2f})")
+            recent_atk = np.mean(scores_atk[-100:]) if scores_atk else 0
+            logger.info(f"Ep {episode} | Def Score: {recent_def:.2f} (Eps: {agent.epsilon:.2f}) | Atk Score: {recent_atk:.2f} (Eps: {attacker.epsilon if not args.no_adversary else 0:.2f})")
+            
+            # Check training balance
+            if episode > 500 and not args.no_adversary:
+                balance = metrics_logger.check_training_balance(window=100)
+                if not balance["balanced"]:
+                    logger.warning(balance["message"])
+                    logger.warning(balance["recommendation"])
 
     # Save Models
     os.makedirs("results/checkpoints", exist_ok=True)
@@ -154,6 +188,27 @@ def train(args):
     torch.save(agent.policy_net.state_dict(), "results/checkpoints/policy_net.pth")
     torch.save(attacker.policy_net.state_dict(), "results/checkpoints/attacker_net.pth")
     logger.info("Competitive Training Complete.")
+    
+    # Save metrics and generate visualizations
+    logger.info("\nSaving training metrics and generating visualizations...")
+    metrics_file = metrics_logger.save()
+    metrics_logger.save_csv()
+    
+    # Print summary
+    summary = metrics_logger.get_summary(window=100)
+    logger.info(f"\nTraining Summary (last 100 episodes):")
+    logger.info(f"  Avg Defender Score: {summary['avg_defender_score']:.3f}")
+    logger.info(f"  Avg Attacker Score: {summary['avg_attacker_score']:.3f}")
+    logger.info(f"  Defender Win Rate: {summary['defender_win_rate']:.1%}")
+    logger.info(f"  Final Epsilon (Def): {summary.get('current_epsilon_def', 'N/A')}")
+    logger.info(f"  Final Epsilon (Atk): {summary.get('current_epsilon_atk', 'N/A')}")
+    
+    # Generate visualizations
+    try:
+        generate_all_plots(metrics_file, output_dir="results/plots")
+        logger.info(f"✅ Training visualizations saved to: results/plots/")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not generate plots: {e}")
 
 if __name__ == "__main__":
     from src.config import Config
